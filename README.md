@@ -1,1 +1,2 @@
-# protein_function_prediction_networks
+# Neurális hálózatok alkalmazása a fehérje működés előrejelzésében kis és nagy adathalmazokon
+Holicza Barnabás
