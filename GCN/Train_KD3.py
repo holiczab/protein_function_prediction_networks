@@ -73,6 +73,10 @@ class Net(nn.Module):
         output = torch.matmul(seq_out, graph_out)
         output = torch.sigmoid(output)
         return output
+    
+    def extract_relations(self, node, adj):
+        return adj
+
 
 def add_noise(features, noise_type="gaussian", stddev=0.1, prob=0.5):
     if features.ndim != 3:

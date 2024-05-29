@@ -73,6 +73,11 @@ class Net(nn.Module):
         output = torch.matmul(seq_out, graph_out)
         output = torch.sigmoid(output)
         return output
+    
+    def extract_features(self, seq, node, adj):
+        node_embd = self.Graph_Embedder(node)
+        graph_out = self.GCN(node_embd, adj)
+        return graph_out
 
 def add_noise(features, noise_type="gaussian", stddev=0.1, prob=0.5):
     if features.ndim != 3:
