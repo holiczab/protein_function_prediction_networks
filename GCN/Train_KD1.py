@@ -229,7 +229,7 @@ def train_model(args):
     criterion = nn.BCELoss()
 
     # Temperature for distillation
-    T = 5.0  # Adjust this temperature as per your needs
+    T = 5.0
 
     model.train()
 
@@ -280,8 +280,6 @@ def train_model(args):
 
         train_loss = train_loss / len(train_loader)
         print(f"Epoch {epoch + 1}, Train Loss: {train_loss:.4f}")
-
-        # Save model checkpoint after each epoch if needed
 
     # Save final model
     torch.save(model, f'Weights/{FOLDER}/final.pth')

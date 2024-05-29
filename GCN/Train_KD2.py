@@ -229,14 +229,14 @@ def train_model(args):
         teacher_model.eval()
     else:
         teacher_model = None
-        
+
     # Initialize student model
     student_model = Net(len(label_map), args).to(device)
     optimizer = optim.Adam(student_model.parameters(), lr=args.lr)
     criterion = nn.BCELoss()
 
     # Temperature for distillation
-    T = 1.0  # Adjust this temperature as per your needs
+    T = 1.0 
 
     student_model.train()
 
@@ -266,8 +266,8 @@ def train_model(args):
             # Knowledge Distillation - feature-based
             if teacher_model is not None:
                 with torch.no_grad():
-                    teacher_features = teacher_model.extract_features(input)  # Modify according to your teacher model
-                student_features = student_model.extract_features(input)  # Modify according to your student model
+                    teacher_features = teacher_model.extract_features(input)
+                student_features = student_model.extract_features(input)
 
                 distillation_loss = F.mse_loss(student_features, teacher_features)
                 loss += distillation_loss
@@ -286,8 +286,6 @@ def train_model(args):
 
         train_loss = train_loss / len(train_loader)
         print(f"Epoch {epoch + 1}, Train Loss: {train_loss:.4f}")
-
-        # Save model checkpoint after each epoch if needed
 
     # Save final student model
     torch.save(student_model.state_dict(), f'Weights/{FOLDER}/final_student.pth')

@@ -235,7 +235,7 @@ def train_model(args):
     criterion = nn.BCELoss()
 
     # Temperature for distillation
-    T = 1.0  # Adjust this temperature as per your needs
+    T = 1.0 
 
     student_model.train()
 
@@ -265,10 +265,8 @@ def train_model(args):
             # Knowledge Distillation - relation-based
             if teacher_model is not None:
                 with torch.no_grad():
-                    teacher_relations = teacher_model.extract_relations(input)  # Modify according to your teacher model
-                student_relations = student_model.extract_relations(input)  # Modify according to your student model
-
-                # Example of relation-based loss (e.g., MSE)
+                    teacher_relations = teacher_model.extract_relations(input)
+                student_relations = student_model.extract_relations(input)
                 distillation_loss = F.mse_loss(student_relations, teacher_relations)
                 loss += distillation_loss
 
@@ -286,8 +284,6 @@ def train_model(args):
 
         train_loss = train_loss / len(train_loader)
         print(f"Epoch {epoch + 1}, Train Loss: {train_loss:.4f}")
-
-        # Save model checkpoint after each epoch if needed
 
     # Save final student model
     torch.save(student_model.state_dict(), f'Weights/{FOLDER}/final_student.pth')
