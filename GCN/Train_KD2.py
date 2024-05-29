@@ -8,7 +8,7 @@ from Utils import FC, Embedder, GCN
 import Making_Graph
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, TensorDataset, Subset
 import os
 from torchsummary import summary
 
@@ -74,6 +74,24 @@ class Net(nn.Module):
         output = torch.sigmoid(output)
         return output
 
+def add_noise(features, noise_type="gaussian", stddev=0.1, prob=0.5):
+    if features.ndim != 3:
+        raise ValueError(f"Expected a 3D array, but got {features.ndim}D array instead.")
+
+    batch_size, num_proteins, num_features = features.shape
+    noisy_features = features.copy()
+
+    if noise_type == "gaussian":
+        noise = np.random.normal(scale=stddev, size=(batch_size, num_proteins, num_features))
+        noisy_features += noise
+    elif noise_type == "salt_and_pepper":
+        mask = np.random.choice([0, 1], size=(batch_size, num_proteins, num_features), p=[prob, 1-prob])
+        noisy_features *= mask
+    else:
+        raise ValueError(f"Unsupported noise type: {noise_type}")
+
+    return noisy_features
+
 def train_model(args):
     print("training model...")
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
@@ -100,7 +118,7 @@ def train_model(args):
     # preprocess_data(original_data_file, limited_data_file)
 
     # Data load
-    adj, one_hot_node, label_map, label_map_ivs = Making_Graph.build_graph(FOLDER,SMALL_TYPE)
+    # adj, one_hot_node, label_map, label_map_ivs = Making_Graph.build_graph(FOLDER,SMALL_TYPE)
 
     def get_label_counts(dataset, valid_indexes=None):
       label_counts = {}
@@ -123,63 +141,97 @@ def train_model(args):
             label_counts[a] = 1
       return label_counts, total_samples
     
+    # 500-ra szűkítés
     # Get label counts and total samples
-    label_counts, total_samples = get_label_counts(CustomDataset(label_map, args.type_path))
+    # label_counts, total_samples = get_label_counts(CustomDataset(label_map, args.type_path))
 
-    sorted_labels = sorted(label_counts.items(), key=lambda x: x[1], reverse=True)
-    top_500_labels = [label for label, _ in sorted_labels[:500]]
-    indexes = [idx for idx, label in enumerate(label_counts) if label in top_500_labels]
+    # sorted_labels = sorted(label_counts.items(), key=lambda x: x[1], reverse=True)
+    # top_500_labels = [label for label, _ in sorted_labels[:500]]
+    # indexes = [idx for idx, label in enumerate(label_counts) if label in top_500_labels]
 
-    # print(indexes)
+    # # print(indexes)
 
-    new_label_map = {key: value for key, value in label_map.items() if value in indexes}
-    reindexed_label_map = {key: i for i, key in enumerate(new_label_map.keys())}
+    # new_label_map = {key: value for key, value in label_map.items() if value in indexes}
+    # reindexed_label_map = {key: i for i, key in enumerate(new_label_map.keys())}
 
-    # print(reindexed_label_map)
-    #reindexed_label_map = label_map
-    valid_indexes = new_label_map.keys()
+    # # print(reindexed_label_map)
+    # #reindexed_label_map = label_map
+    # valid_indexes = new_label_map.keys()
 
-    adj, one_hot_node, label_map, label_map_ivs = Making_Graph.build_graph(FOLDER,SMALL_TYPE, valid_indexes)
+    adj, one_hot_node, label_map, label_map_ivs = Making_Graph.build_graph(FOLDER,SMALL_TYPE)
 
-    data = CustomDataset(reindexed_label_map, args.type_path, valid_indexes)
-    label_counts_new, total_samples = get_label_counts(data, valid_indexes)
+    data = CustomDataset(label_map, args.type_path)
+    label_counts_new, total_samples = get_label_counts(data)
     tr_dataset = data
     train_loader = DataLoader(dataset=tr_dataset, batch_size=args.batch_size)
 
+    num_elements = 25000
+    subset_indices = list(range(num_elements))
+    subset_dataset = Subset(tr_dataset, subset_indices)
+    train_loader = DataLoader(dataset=subset_dataset, batch_size=args.batch_size)
+    if not args.augment:
+        print(f"Total number of samples in training data: {len(subset_dataset)}")
+
+    args.augment = False
+    if args.augment:
+        print("Augmenting data with noise...")
+        augmented_data = []
+        for seq, target in tr_dataset:
+            seqq = seq[0]
+            noisy_seq = add_noise(seqq, noise_type="gaussian", stddev=0.1)
+            # Convert noisy sequence back to tensor and move to device
+            noisy_seq = torch.tensor(noisy_seq).to(device)
+            augmented_data.append((noisy_seq, target))
+        augmented_dataset = TensorDataset(*zip(*augmented_data))
+        train_loader = DataLoader(dataset=augmented_dataset, batch_size=args.batch_size, shuffle=True)
+        print(f"Total number of samples in training data: {len(augmented_dataset)}")
+
+
+
     print("Len : Reindex_map")
-    print(len(reindexed_label_map))
     print(len(label_counts_new))
-
-    # Print total number of samples
-    print(f"Total number of samples in training data: {total_samples}")
     
-    # Create pie chart using matplotlib (assuming you have it installed)
-    import matplotlib.pyplot as plt
+    # # Create pie chart using matplotlib (assuming you have it installed)
+    # import matplotlib.pyplot as plt
 
-    plt.figure(figsize=(8, 8))
-    plt.pie(label_counts_new.values(), labels=None, autopct="")
-    plt.title("Label Distribution in Training Data")
-    plt.savefig("C:/Users/T580/Desktop/ELTE/#SZAKDOLGOZAT/Effective-GCN-based-Hierarchical-Multi-label-classification-for-Protein-Function-Prediction/label_distribution.png")  # Replace with your desired filename
+    # plt.figure(figsize=(8, 8))
+    # plt.pie(label_counts_new.values(), labels=None, autopct="")
+    # plt.title("Label Distribution in Training Data")
+    # plt.savefig("C:/Users/T580/Desktop/ELTE/#SZAKDOLGOZAT/Effective-GCN-based-Hierarchical-Multi-label-classification-for-Protein-Function-Prediction/label_distribution.png")  # Replace with your desired filename
 
-    print("Label distribution saved as label_distribution.png")
+    # print("Label distribution saved as label_distribution.png")
     
-    # Save label counts to a text file
-    with open("C:/Users/T580/Desktop/ELTE/#SZAKDOLGOZAT/Effective-GCN-based-Hierarchical-Multi-label-classification-for-Protein-Function-Prediction/label_counts.txt", "w") as f:
-      for label, count in label_counts_new.items():
-        f.write(f"{label}: {count}\n")
+    # # Save label counts to a text file
+    # with open("C:/Users/T580/Desktop/ELTE/#SZAKDOLGOZAT/Effective-GCN-based-Hierarchical-Multi-label-classification-for-Protein-Function-Prediction/label_counts.txt", "w") as f:
+    #   for label, count in label_counts_new.items():
+    #     f.write(f"{label}: {count}\n")
 
-    print("Label counts saved to label_counts.txt")
-    print(tr_dataset.__len__())
+    # print("Label counts saved to label_counts.txt")
+    # print(tr_dataset.__len__())
 
-    # Load teacher model if available
-    teacher_model = None  # Replace with loading your teacher model
-    if args.teacher_model_path:
-        teacher_model = Net(args).to(device)
-        teacher_model.load_state_dict(torch.load(args.teacher_model_path))
-        teacher_model.eval()  # Set to evaluation mode, no gradients
+    # model definition
+    model = Net(len(label_map), args).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    model.train()
+
+    total_loss = 0
+    print_every = 1
+    start = time.time()
+    temp = start
     
+    print(f"Epochs: {args.epochs}, Batch_size: {args.batch_size}, LR: {args.lr}")
+    print(f"Number of iterations: {len(train_loader)}")
+
+    if args.pretrained_model_path:
+        pretrained_model_path = args.pretrained_model_path
+        teacher_model = Net(len(label_map), args).to(device)
+        teacher_model.load_state_dict(torch.load(pretrained_model_path))
+        teacher_model.eval()
+    else:
+        teacher_model = None
+        
     # Initialize student model
-    student_model = Net(len(reindexed_label_map), args).to(device)
+    student_model = Net(len(label_map), args).to(device)
     optimizer = optim.Adam(student_model.parameters(), lr=args.lr)
     criterion = nn.BCELoss()
 
@@ -257,10 +309,10 @@ def main():
     parser.add_argument("--nhid", type=int, default=80, help="GCN node hidden size")
     parser.add_argument("--seqfeat", type=int, default=80, help="sequence reduced feature size")
 
-    parser.add_argument("--type_path",type=str,default=f"C:/Users/T580/Desktop/ELTE/#SZAKDOLGOZAT/Effective-GCN-based-Hierarchical-Multi-label-classification-for-Protein-Function-Prediction/dataset/MFO/train_data_mfo_25k.pkl")
-    #parser.add_argument("--type_path",type=str,default=f"C:/Users/T580/Desktop/ELTE/#SZAKDOLGOZAT/Effective-GCN-based-Hierarchical-Multi-label-classification-for-Protein-Function-Prediction/dataset/MFO/train_data_mfo.pkl")
+    parser.add_argument("--type_path",type=str,default=f"C:/Users/T580/Desktop/ELTE/#SZAKDOLGOZAT/Effective-GCN-based-Hierarchical-Multi-label-classification-for-Protein-Function-Prediction/dataset/MFO/train_data_mfo.pkl")
     parser.add_argument("--folder",type=str,default="MFO")
     parser.add_argument("--small_type",type=str,default="mf")
+    parser.add_argument("--augment",type=bool,default=False)
 
     args = parser.parse_args()
 

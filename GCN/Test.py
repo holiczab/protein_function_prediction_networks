@@ -5,12 +5,14 @@ import Making_Graph
 from Utils import FC, Embedder, GCN
 import numpy as np
 import pickle
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Subset
 import argparse
 
 gc.collect()
 torch.cuda.empty_cache()
 
+FOLDER = ""
+SMALL_TYPE = ""
 
 class CustomDataset(Dataset):
     def __init__(self, test_data_file):
@@ -53,15 +55,24 @@ class Net(nn.Module):
 
 
 def test_model(args):
-    adj, one_hot_node, label_map, label_map_ivs = Making_Graph.build_graph()
+
+    FOLDER = args.folder
+    SMALL_TYPE = args.small_type
+
+    adj, one_hot_node, label_map, label_map_ivs = Making_Graph.build_graph(FOLDER,SMALL_TYPE)
 
     test_dataset = CustomDataset(args.type_path)
-    test_loader = DataLoader(dataset=test_dataset, batch_size=args.batch_size)
 
-    device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
+    test_dataset = CustomDataset(args.type_path)
+    subset_indices = list(range(min(len(test_dataset), 1000)))
+    test_subset = Subset(test_dataset, subset_indices)
+
+    test_loader = DataLoader(dataset=test_subset, batch_size=args.batch_size)
+
+    device = torch.device("cpu")
     print(device)
 
-    model = torch.load("Weights/bpo_final.pth").cuda()
+    model = torch.load("Weights/bpo_final.pth", map_location=torch.device('cpu'))
     model = model.eval()
 
     yy = []
@@ -99,7 +110,9 @@ def main():
     parser.add_argument("--nhid", type=int, default=80, help="GCN node hidden size")
     parser.add_argument("--seqfeat", type=int, default=80, help="sequence reduced feature size")
 
-    parser.add_argument("--type_path",type=str,default="dataset/BPO/test_data_bpo.pkl")
+    parser.add_argument("--type_path",type=str,default="dataset/MFO/test_data_mfo.pkl")
+    parser.add_argument("--folder",type=str,default="MFO")
+    parser.add_argument("--small_type",type=str,default="mf")
 
     args = parser.parse_args()
 
